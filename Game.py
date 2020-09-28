@@ -194,7 +194,29 @@ class Game:
         turn_txt = ""
         blue_pieces_txt = ""
         red_pieces_txt = ""
-        if(self.placing_phase):
+        if(self.removing_phase):
+            if(self.use_ai):
+                if(self.player_turn == 1):
+                    turn_txt = "Player Removing"
+                else:
+                    turn_txt = "Computer Removing"
+            else:
+                if(self.player_turn == 1):
+                    turn_txt = "Blue Removing"
+                else:
+                    turn_txt = "Red Removing"
+            if(self.placing_phase):
+                blue_pieces_txt = "Placing {} Blue Pieces" \
+                    .format(self.pieces_count[0][0])
+                red_pieces_txt = "Placing {} Red Pieces" \
+                    .format(self.pieces_count[1][0])
+            else:
+                blue_pieces_txt = "{} Blue Pieces Remaining" \
+                .format(self.pieces_count[0][1])
+                red_pieces_txt = "{} Red Pieces Remaining" \
+                    .format(self.pieces_count[1][1])
+                
+        elif(self.placing_phase):
             if(self.use_ai):
                 if(self.player_turn == 1):
                     turn_txt = "Player Placing"
@@ -371,6 +393,21 @@ class Game:
         return (self.slot_pieces[position] == player and
            not (self.has_non_mill_pieces(player) and self.is_mill(position)))
 
+    # Checks if move from position to new_position is valid
+    # position: index of the current location of the piece
+    # new_position: index of the proposed move
+    # Returns true is move is valid, otherwise false
+    def is_valid_move(self, position, new_position):
+        # Allow flying if the current player has 3 pieces
+        if((self.player_turn and
+            self.pieces_count[self.player_turn - 1][1] == 3)):
+            return True
+        # Make sure the slot is empty
+        if(self.slot_pieces[position] == 0):
+            return False
+    
+        return new_position in self.slot_adj[position]
+
     # Place a piece at the position by the player
     # position: Slot index of the piece to place
     # player: integer(1, 2) of the place placing the piece
@@ -385,6 +422,40 @@ class Game:
     # position: index of the piece to remove
     def remove_piece(self, position):
         self.slot_pieces[position] = 0
+
+    # Selects a players piece by providing a yellow border
+    # position: index of piece to select
+    # Returns True if piece was selected, false otherwise
+    def select_piece(self, position):
+        if(self.slot_pieces[position] == 0 or
+           self.slot_pieces[position] != self.player_turn or
+           self.selected_piece == position):
+            return False
+    
+        color = BLUE
+
+        if(self.player_turn == 2):
+            color = RED
+
+        # Draw highlight
+        self.filled_circle(YELLOW, color, self.slot_coord[position],
+                           self.piece_size - 1, 2)
+        pygame.display.update()
+        return True
+
+    # Unselects a players piece by removing a yellow border
+    # position: piece to remove the selected drawing
+    def unselect_piece(self, position):
+        # Determine the color of the piece
+        color = BLUE
+    
+        if(self.slot_pieces[position] == 2):
+            color = RED
+
+        # Draw piece without highlight
+        self.filled_circle(BLACK, color, self.slot_coord[position],
+                           self.piece_size, 2)
+        pygame.display.update()
 
     # Resets game
     def reset(self):
@@ -412,12 +483,11 @@ class Game:
             if(self.pieces_count[1][0] == 0):
                 self.placing_phase = False
 
-            self.draw_board()
-
             # Check if mill is created from placing the piece
             # if so allow player to remove opponent piece
             if(self.is_mill(slot_idx)):
                 self.removing_phase = True
+                self.draw_board()
                 return 0
 
             # Check if a player has won
@@ -448,9 +518,8 @@ class Game:
             self.pieces_count[opponent - 1][1] -= 1
 
             # Check for a winner
-            win_result = self.has_won(self.player_turn)
-            if(win_result != 0):
-                return win_result
+            if(self.has_won(self.player_turn)):
+                return self.player_turn
 
             # Indicate removing is done
             self.removing_phase = False
@@ -471,7 +540,40 @@ class Game:
         return 0
 
     def handle_player_movement(self, slot_idx):
-        pass
+        # Handle moves with a piece selected
+        if(self.selected_piece > -1):
+            # Check if move is valid and attempt to place
+            if(self.is_valid_move(self.selected_piece, slot_idx) and
+               self.place_piece(slot_idx, self.player_turn)):
+                # Remove the old position and reset selection
+                self.remove_piece(self.selected_piece)
+                self.selected_piece = -1
+
+                # Check if the movement wins the game
+                if(self.has_won(self.player_turn)):
+                    return self.player_turn
+
+                # Check if mill is created from moving the piece
+                # if so allow player to remove opponent piece
+                if(self.is_mill(slot_idx)):
+                    self.removing_phase = True
+                    self.draw_board()
+                    return 0
+
+                #Switch player turns
+                self.player_turn = 2 if self.player_turn == 1 else 1
+
+                self.draw_board()
+
+            # Select a different piece
+            elif(self.select_piece(slot_idx)):
+                self.unselect_piece(self.selected_piece)
+                self.selected_piece = slot_idx
+        # First Selection
+        elif(self.select_piece(slot_idx)):
+            self.selected_piece = slot_idx
+            
+        return 0
 
     def handle_ai_placing(self):
         pass
